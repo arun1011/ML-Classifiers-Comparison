@@ -1,4 +1,6 @@
-from .dependencies import joblib, sklearn, pd, np
+import joblib, sklearn
+import pandas as pd
+import numpy as np
 from sklearn.preprocessing import LabelEncoder , OneHotEncoder
 LE = LabelEncoder()
 from sklearn import model_selection
@@ -12,10 +14,9 @@ from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-from .textProc import token_counter, sort_by_value
 ######----default name for label is "class"--------#####
 
-def sort_byvalue(dictx):
+def sort_by_value(dictx):
     dicty=sorted(dictx.items(),key=lambda item: item[1],reverse=True)
     return dicty
 
@@ -25,10 +26,10 @@ def data_to_df(x):
         x = pd.DataFrame(x)
     return x
 
-def clean_dataset(df):
-    df.dropna(inplace=True)
-    indices_to_keep = ~df.isin([np.nan, np.inf, -np.inf]).any(1)
-    return df[indices_to_keep]
+def clean_dataset(X,Y):
+    X.dropna(inplace=True)
+    index_to_keep = ~X.isin([np.nan, np.inf, -np.inf]).any(1)
+    return X[index_to_keep], Y[index_to_keep]
 
 
 def tex2vec(X):
@@ -58,12 +59,11 @@ def get_models():
 def prepare_data(X,Y):
     model_meta_data={'vectorized':[], 'one-hot_encoded':[], 'log_transformed':[]}
     n = 100
-    X = shuffle(X)
     X = data_to_df(X)
-    X = clean_dataset(X)
+    X, Y = clean_dataset(X, Y)
     NewX = np.array([[0] for i in range(len(X))]);  # print(NewX.shape)
     for col in X.columns:
-        # print(col)
+        #print(col)
         if X[col].dtype == 'O':
             sample = X[col][:n]
             tokens = [len(t.split()) for t in sample]
@@ -74,10 +74,11 @@ def prepare_data(X,Y):
                 NewX = np.concatenate((NewX, F), axis=1)
                 model_meta_data['vectorized'].append(col)
             else:
+#                print(set(list(X[col])))
                 enc = OneHotEncoder(handle_unknown='ignore')
-                S = X[col].values.reshape(1, -1)
+                S = LE.fit_transform(list(X[col].values)).reshape(-1, 1); #print(S)
                 ohe_model = enc.fit(S)
-                F = enc.transform(S).toarray().reshape(-1, 1);  # print(2,F.shape, F[0])
+                F = enc.transform(S).toarray();  #print(2,F.shape, F[0])
                 NewX = np.concatenate((NewX, F), axis=1)
                 model_meta_data['one-hot_encoded'].append(col)
         else:
@@ -89,13 +90,12 @@ def prepare_data(X,Y):
 
     # As we need to clean X, add Y and clean to maintain the dimensions
     LE.fit(list(Y))
+    NewY = LE.transform(Y)
     NewX = data_to_df(NewX)
-    NewX['Y'] = LE.transform(Y);  # print(list(NewX['Y']))
-    NewX = clean_dataset(NewX);  # print(NewX.shape)
+    NewX, NewY= clean_dataset(NewX, NewY);  # print(NewX.shape)
     NewX = NewX.iloc[0:, 1:];  # print(NewX.shape)
-    NewY = NewX['Y']
-    NewX = NewX.drop(['Y'], axis=1);  # print(NewX.shape)
     return NewX, NewY, model_meta_data
+
 
 
 def compare_models(X,Y):
@@ -122,12 +122,13 @@ def compare_models(X,Y):
         temp[name] = cvmean
         # print(name, ':', cvmean, " / ", cvstd); print("")
 
-    final_model = sort_byvalue(temp)[0]
+    final_model = sort_by_value(temp)[0]
     model_meta_data['best_model'] = final_model
     model_meta_data['models_data'] = model_list
     return model_meta_data, NewX
 
 
+#--------feature analysis----------#
 
 def is_categorical(data):
     uv = len(list(set(data))); #print("unique-->", uv)
